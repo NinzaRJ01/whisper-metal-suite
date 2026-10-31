@@ -1,0 +1,39 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Compiled Binaries (Build outputs)
+whisper-pill
+meeting-recorder
+*.o
+*.dylib
+*.dSYM
+
+# Whisper & LLM Models (Large files)
+*.bin
+*.gguf
+.whisper-models/
+models/
+
+# Runtime, Daemons & Logs
+*.pid
+*.log
+/tmp/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Meeting Recordings & Local Data
+meetings/
+test_run/
+*.wav
+*.mp3
+*.m4a
+sanitization_report.json

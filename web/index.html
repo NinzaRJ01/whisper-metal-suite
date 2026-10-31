@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Whisper macOS Architecture & Pipeline Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            themeVariables: {
+                darkMode: true,
+                background: '#0f172a',
+                primaryColor: '#6366f1',
+                primaryTextColor: '#f8fafc',
+                primaryBorderColor: '#818cf8',
+                lineColor: '#94a3b8',
+                secondaryColor: '#1e293b',
+                tertiaryColor: '#090d16'
+            }
+        });
+    </script>
+    <style>
+        body {
+            background-color: #090d16;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+        .glass-card {
+            background: rgba(30, 41, 59, 0.65);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .pill-badge {
+            background: rgba(99, 102, 241, 0.18);
+            border: 1px solid rgba(129, 140, 248, 0.35);
+            color: #a5b4fc;
+        }
+        .mermaid {
+            display: flex;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 sm:p-8 flex flex-col items-center">
+    <div class="max-w-6xl w-full space-y-6">
+
+        <!-- Top Header -->
+        <div class="glass-card rounded-3xl p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+                <div class="flex items-center gap-3">
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold pill-badge">
+                        ⚡ Apple Silicon Metal GPU
+                    </span>
+                    <span class="text-xs text-emerald-400 font-mono flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        Active & English-Locked
+                    </span>
+                </div>
+                <h1 class="text-3xl sm:text-4xl font-extrabold text-white mt-2 tracking-tight">Whisper System Architecture</h1>
+                <p class="text-slate-400 text-sm mt-1">Dual-Pipeline: Live Push-to-Talk Dictation HUD + Meeting Recording & Dynamic Synthesis</p>
+            </div>
+            <div class="flex items-center gap-3 text-xs">
+                <div class="bg-slate-900/80 px-4 py-2.5 rounded-2xl border border-slate-700/60 text-slate-300">
+                    <span class="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">Device Hardware</span>
+                    Apple M5 GPU (Unified Memory)
+                </div>
+            </div>
+        </div>
+
+        <!-- System Architecture Mermaid Flowchart -->
+        <div class="glass-card rounded-3xl p-6 sm:p-8 space-y-4">
+            <div class="flex items-center justify-between pb-4 border-b border-slate-700/60">
+                <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                    <span>🗺️</span> End-to-End System Topology
+                </h2>
+                <span class="text-xs text-indigo-400 bg-indigo-950/60 px-3 py-1 rounded-full border border-indigo-800/40">Native Swift + Metal + Python</span>
+            </div>
+            
+            <div class="mermaid p-4 bg-slate-950/60 rounded-2xl border border-slate-800 overflow-x-auto">
+graph TD
+    subgraph Input["🎧 Audio Capture & Ingestion"]
+        MIC["Mac Microphone"] -->|"48kHz PCM"| ENG["AVAudioEngine Tap"]
+        ENG -->|"Downsample Stride = 3"| BUF["In-Memory 16kHz PCM Buffer"]
+    end
+
+    subgraph PipelineA["🚀 Pipeline A: Live Push-to-Talk Dictation"]
+        BUF -->|"450ms Rolling Slice"| SNAP["/tmp/whisper_stream_snapshot.wav"]
+        SNAP -->|"whisper-cli (~180ms)"| BASE_EN["ggml-base.en.bin<br/>(-l en English Only)"]
+        BASE_EN -->|"Streaming Text"| HUD["Floating Glass Pill HUD<br/>(3-Line Rolling Preview)"]
+        
+        BUF -->|"Key Release (Final Pass)"| FINAL_WAV["/tmp/whisper_stream_final.wav"]
+        FINAL_WAV -->|"whisper-cli"| TURBO_EN["ggml-large-v3-turbo.bin<br/>(-l en English Only)"]
+        TURBO_EN -->|"High Accuracy Text"| CLIP["NSPasteboard"]
+        CLIP -->|"CGEvent (Cmd + V)"| CURSOR["Active Text Field / Cursor"]
+    end
+
+    subgraph PipelineB["🎙️ Pipeline B: Meeting Recorder & AI Synthesis"]
+        BUF -->|"Full Recording"| MEET_WAV["~/EmptyOne/meetings/.../audio.wav"]
+        MEET_WAV -->|"whisper-cli -oj -otxt -l en"| WHISPER_MEET["Whisper Metal Engine"]
+        WHISPER_MEET -->|"transcript.txt (Raw)"| DLP["🛡️ Local Privacy Middleware<br/>(Regex + Local Qwen 7B)"]
+        DLP -->|"Variables Substituted<br/>[REDACTED_PASSWORD]"| SUM_PY["summarize_meeting.py"]
+        WHISPER_MEET -->|"transcript.json (offsets)"| SUM_PY
+        
+        SUM_PY -->|"Tier 1: Gemini (Sanitized Only)"| AGY["Gemini (AGY + noteworthy-notes)"]
+        AGY -.->|"Fallback if Offline"| LM["Tier 2: Local LM Studio (Qwen 7B)"]
+        LM -.->|"Safety Fallback"| NLP["Tier 3: Rule-Based NLP"]
+        
+        AGY -->|"Markdown & HTML"| REPORT["Interactive summary.html & summary.md"]
+        LM -->|"Markdown & HTML"| REPORT
+        NLP -->|"Markdown & HTML"| REPORT
+        
+        REPORT -->|"Default Browser"| BROWSER["Browser Dashboard<br/>(Synced Moving Transcript)"]
+    end
+
+    subgraph Storage["💾 Retention & Pruning Engine"]
+        PRUNE["prune_meetings.py"]
+        PRUNE -->|"Heavy Pool (5000 MB)"| DEL_AUDIO["Deletes Oldest audio.wav First"]
+        PRUNE -->|"Light Pool (500 MB)"| DEL_TEXT["Preserves Summaries & Transcripts"]
+    end
+
+    style BASE_EN fill:#1e1b4b,stroke:#818cf8,stroke-width:2px;
+    style TURBO_EN fill:#312e81,stroke:#6366f1,stroke-width:2px;
+    style HUD fill:#0f172a,stroke:#38bdf8,stroke-width:2px;
+    style REPORT fill:#064e3b,stroke:#34d399,stroke-width:2px;
+    style CURSOR fill:#14532d,stroke:#4ade80,stroke-width:2px;
+    style BROWSER fill:#1e1b4b,stroke:#a855f7,stroke-width:2px;
+            </div>
+        </div>
+
+        <!-- 3-Column Component Details -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+            <!-- Card 1: Dictation Pill -->
+            <div class="glass-card rounded-2xl p-6 space-y-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-2xl">⚡</span>
+                    <span class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">RUNNING (PID 86792)</span>
+                </div>
+                <h3 class="text-lg font-bold text-white">Live Push-to-Talk HUD</h3>
+                <p class="text-xs text-slate-300 leading-relaxed">
+                    Native Swift daemon listening for <code class="text-indigo-300">Right Option (⌥)</code> hold. Streams real-time transcription into a floating glass card and auto-pastes directly at the cursor on release.
+                </p>
+                <div class="pt-3 border-t border-slate-700/50 space-y-1.5 text-xs">
+                    <div class="flex justify-between text-slate-400"><span>Streaming Latency:</span> <span class="text-slate-200 font-mono">~180ms</span></div>
+                    <div class="flex justify-between text-slate-400"><span>Streaming Model:</span> <span class="text-indigo-300 font-mono">ggml-base.en.bin</span></div>
+                    <div class="flex justify-between text-slate-400"><span>Final Pass Model:</span> <span class="text-indigo-300 font-mono">large-v3-turbo (-l en)</span></div>
+                    <div class="flex justify-between text-slate-400"><span>Screen Invisibility:</span> <span class="text-emerald-300 font-mono">sharingType = .none</span></div>
+                </div>
+            </div>
+
+            <!-- Card 2: Meeting Recorder -->
+            <div class="glass-card rounded-2xl p-6 space-y-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-2xl">🎙️</span>
+                    <span class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">RUNNING (PID 86894)</span>
+                </div>
+                <h3 class="text-lg font-bold text-white">Meeting Recorder Daemon</h3>
+                <p class="text-xs text-slate-300 leading-relaxed">
+                    Background meeting daemon triggered by <code class="text-indigo-300">Double-tap Option (⌥ ⌥)</code> or 1-click Menu Bar icon. Saves pristine 16kHz audio, transcribes with millisecond offsets, and opens browser notes.
+                </p>
+                <div class="pt-3 border-t border-slate-700/50 space-y-1.5 text-xs">
+                    <div class="flex justify-between text-slate-400"><span>Primary Hotkey:</span> <span class="text-slate-200 font-mono">Double-tap ⌥</span></div>
+                    <div class="flex justify-between text-slate-400"><span>Menu Bar Widget:</span> <span class="text-slate-200 font-mono">🔴 Live Timer & Stealth</span></div>
+                    <div class="flex justify-between text-slate-400"><span>Transcription:</span> <span class="text-indigo-300 font-mono">large-v3-turbo (-oj -l en)</span></div>
+                    <div class="flex justify-between text-slate-400"><span>Storage Dir:</span> <span class="text-slate-300 font-mono">~/EmptyOne/meetings/</span></div>
+                </div>
+            </div>
+
+            <!-- Card 3: Multi-Tier Intelligence -->
+            <div class="glass-card rounded-2xl p-6 space-y-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-2xl">🧠</span>
+                    <span class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">MULTI-TIER ENGINE</span>
+                </div>
+                <h3 class="text-lg font-bold text-white">Dynamic AI Synthesizer</h3>
+                <p class="text-xs text-slate-300 leading-relaxed">
+                    Synthesizes executive meeting summaries with dynamic domain sections (PV, Technical Architecture, Risks) and syncs live-moving transcripts below the audio player.
+                </p>
+                <div class="pt-3 border-t border-slate-700/50 space-y-1.5 text-xs">
+                    <div class="flex justify-between text-slate-400"><span>Tier 1 (Cloud AI):</span> <span class="text-indigo-300 font-mono">Gemini (AGY)</span></div>
+                    <div class="flex justify-between text-slate-400"><span>Tier 2 (Offline LLM):</span> <span class="text-indigo-300 font-mono">LM Studio (Port 1234)</span></div>
+                    <div class="flex justify-between text-slate-400"><span>Interactive UI:</span> <span class="text-slate-200 font-mono">Click-to-Seek + Auto-Scroll</span></div>
+                    <div class="flex justify-between text-slate-400"><span>Retention Pruner:</span> <span class="text-emerald-300 font-mono">5GB Audio / 500MB Text</span></div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Memory Footprint & Model Lifecycle Deep Dive -->
+        <div class="glass-card rounded-3xl p-6 sm:p-8 space-y-6">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-700/60">
+                <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                    <span>🧠</span> Model Lifecycles, RAM Impact & Cloud vs. Local AI
+                </h2>
+                <span class="text-xs text-emerald-400 bg-emerald-950/60 px-3 py-1 rounded-full border border-emerald-800/40">Real-Time Process Data</span>
+            </div>
+
+            <!-- 2-Column Explanation Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Card A: Whisper Memory & Subprocess Lifecycle -->
+                <div class="bg-slate-900/80 p-5 rounded-2xl border border-slate-800 space-y-3">
+                    <div class="flex items-center gap-2 text-indigo-400 font-bold text-base">
+                        <span>⚡</span> Whisper Models: On-Demand Subprocesses (0 MB Idle)
+                    </div>
+                    <p class="text-xs text-slate-300 leading-relaxed">
+                        Whisper models are <strong>NOT kept resident in RAM</strong>. The Swift daemons (<code class="text-indigo-300">whisper-pill</code> ~42MB, <code class="text-indigo-300">meeting-recorder</code> ~22MB) simply listen for hotkeys.
+                    </p>
+                    <ul class="text-xs text-slate-300 space-y-2 list-disc pl-4">
+                        <li><strong>Live Slices:</strong> Spawns <code class="text-slate-200">whisper-cli</code> with <code class="text-indigo-300">base.en</code> (~148 MB). Runs for ~180ms on Metal GPU, prints partial words, and <strong>immediately terminates</strong>.</li>
+                        <li><strong>Final Pass / Meetings:</strong> Spawns <code class="text-slate-200">whisper-cli</code> with <code class="text-indigo-300">large-v3-turbo</code> (~1.6 GB). Runs for ~1.2s, saves output, and <strong>immediately terminates</strong>.</li>
+                        <li><strong>Zero Memory Leak:</strong> macOS kernel immediately reclaims all memory and GPU textures upon process exit.</li>
+                    </ul>
+                </div>
+
+                <!-- Card B: Gemini vs Local LLM -->
+                <div class="bg-slate-900/80 p-5 rounded-2xl border border-slate-800 space-y-3">
+                    <div class="flex items-center gap-2 text-emerald-400 font-bold text-base">
+                        <span>🛡️</span> Zero Audio Leaves Device (Cloud vs Local AI)
+                    </div>
+                    <p class="text-xs text-slate-300 leading-relaxed">
+                        <strong>Is Gemini used during audio recording? NO.</strong> Audio capture and speech-to-text are 100% private and on-device via Apple Silicon Metal GPU.
+                    </p>
+                    <ul class="text-xs text-slate-300 space-y-2 list-disc pl-4">
+                        <li><strong>Text-Only Summarization:</strong> After Whisper outputs plain text, <code class="text-slate-200">summarize_meeting.py</code> queries <strong>Tier 1: Gemini</strong> for executive insights.</li>
+                        <li><strong>Offline Fallback:</strong> If Gemini is unreachable or times out (25s), it queries <strong>Tier 2: LM Studio</strong> (<code class="text-indigo-300">qwen2.5-coder-7b</code>) locally on port 1234.</li>
+                        <li><strong>LM Studio Memory:</strong> Qwen 7B remains loaded in Unified Memory (~4.35 GB) as long as LM Studio is open, providing instant 3-second offline synthesis.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Model Specifications Table -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs text-slate-300">
+                    <thead class="text-[11px] uppercase bg-slate-950/80 text-slate-400 border-b border-slate-800">
+                        <tr>
+                            <th class="py-2.5 px-3">Model</th>
+                            <th class="py-2.5 px-3">Type</th>
+                            <th class="py-2.5 px-3">Backend</th>
+                            <th class="py-2.5 px-3">Disk Size</th>
+                            <th class="py-2.5 px-3">RAM / VRAM Impact</th>
+                            <th class="py-2.5 px-3">Lifecycle Mode</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800/60 font-mono">
+                        <tr>
+                            <td class="py-2.5 px-3 font-semibold text-white">ggml-base.en.bin</td>
+                            <td class="py-2.5 px-3 text-slate-400 font-sans">ASR (Dictation)</td>
+                            <td class="py-2.5 px-3 text-indigo-300">whisper-cli (Metal)</td>
+                            <td class="py-2.5 px-3">148 MB</td>
+                            <td class="py-2.5 px-3 text-emerald-400">0 MB idle (~148 MB / 180ms)</td>
+                            <td class="py-2.5 px-3 font-sans text-slate-300">On-demand subprocess</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2.5 px-3 font-semibold text-white">ggml-large-v3-turbo.bin</td>
+                            <td class="py-2.5 px-3 text-slate-400 font-sans">ASR (Meetings & Final)</td>
+                            <td class="py-2.5 px-3 text-indigo-300">whisper-cli (Metal)</td>
+                            <td class="py-2.5 px-3">1.62 GB</td>
+                            <td class="py-2.5 px-3 text-emerald-400">0 MB idle (~1.6 GB / 1.5s)</td>
+                            <td class="py-2.5 px-3 font-sans text-slate-300">On-demand subprocess</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2.5 px-3 font-semibold text-white">qwen2.5-coder-7b</td>
+                            <td class="py-2.5 px-3 text-slate-400 font-sans">Local LLM Notes</td>
+                            <td class="py-2.5 px-3 text-indigo-300">LM Studio (llama-server)</td>
+                            <td class="py-2.5 px-3">4.68 GB</td>
+                            <td class="py-2.5 px-3 text-amber-400">~4.35 GB resident</td>
+                            <td class="py-2.5 px-3 font-sans text-slate-300">Persistent daemon (port 1234)</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2.5 px-3 font-semibold text-white">Gemini (via AGY)</td>
+                            <td class="py-2.5 px-3 text-slate-400 font-sans">Cloud LLM Notes</td>
+                            <td class="py-2.5 px-3 text-indigo-300">Antigravity CLI (agy -p)</td>
+                            <td class="py-2.5 px-3 text-slate-500">Cloud</td>
+                            <td class="py-2.5 px-3 text-emerald-400">0 MB local RAM</td>
+                            <td class="py-2.5 px-3 font-sans text-slate-300">Network request on summarize</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Comparative Pipeline Breakdown -->
+        <div class="glass-card rounded-3xl p-6 sm:p-8 space-y-6">
+            <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                <span>🔍</span> Detailed Pipeline Comparison
+            </h2>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm text-slate-300">
+                    <thead class="text-xs uppercase bg-slate-900/80 text-slate-400 border-b border-slate-700">
+                        <tr>
+                            <th class="py-3 px-4">Dimension</th>
+                            <th class="py-3 px-4 text-indigo-300">Push-to-Talk Dictation (whisper-pill)</th>
+                            <th class="py-3 px-4 text-emerald-300">Meeting Recorder (meeting-record)</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800">
+                        <tr>
+                            <td class="py-3 px-4 font-semibold text-white">Primary Goal</td>
+                            <td class="py-3 px-4">Instant typing at cursor across any app</td>
+                            <td class="py-3 px-4">Full meeting capture, transcription & AI notes</td>
+                        </tr>
+                        <tr>
+                            <td class="py-3 px-4 font-semibold text-white">Activation Trigger</td>
+                            <td class="py-3 px-4"><span class="px-2 py-1 rounded bg-slate-800 font-mono text-xs">Hold Right ⌥</span></td>
+                            <td class="py-3 px-4"><span class="px-2 py-1 rounded bg-slate-800 font-mono text-xs">Double-tap ⌥ ⌥</span> or Menu Bar click</td>
+                        </tr>
+                        <tr>
+                            <td class="py-3 px-4 font-semibold text-white">Visual Feedback</td>
+                            <td class="py-3 px-4">Floating 3-line glass card showing live words</td>
+                            <td class="py-3 px-4">Menu bar timer (<code class="text-xs">🔴 00:15</code>) + Floating pill</td>
+                        </tr>
+                        <tr>
+                            <td class="py-3 px-4 font-semibold text-white">Screen Share Defense</td>
+                            <td class="py-3 px-4"><code class="text-xs text-emerald-400">sharingType = .none</code> (Invisible to Zoom/Meet)</td>
+                            <td class="py-3 px-4"><code class="text-xs text-emerald-400">sharingType = .none</code> + <code class="text-xs">--stealth</code> total HUD suppression</td>
+                        </tr>
+                        <tr>
+                            <td class="py-3 px-4 font-semibold text-white">Whisper Model Used</td>
+                            <td class="py-3 px-4"><code class="text-xs text-indigo-300">base.en</code> (live) + <code class="text-xs text-indigo-300">large-v3-turbo</code> (final)</td>
+                            <td class="py-3 px-4"><code class="text-xs text-indigo-300">large-v3-turbo -oj -l en</code></td>
+                        </tr>
+                        <tr>
+                            <td class="py-3 px-4 font-semibold text-white">Language Lock</td>
+                            <td class="py-3 px-4"><span class="text-emerald-400 font-semibold">Strict English</span> (Zero Russian tokens)</td>
+                            <td class="py-3 px-4"><span class="text-emerald-400 font-semibold">Strict English</span> (<code class="text-xs">-l en</code>)</td>
+                        </tr>
+                        <tr>
+                            <td class="py-3 px-4 font-semibold text-white">Output Action</td>
+                            <td class="py-3 px-4">Copies to pasteboard & synthesizes <code class="text-xs">Cmd+V</code></td>
+                            <td class="py-3 px-4">Opens interactive <code class="text-xs">summary.html</code> in default browser</td>
+                        </tr>
+                        <tr>
+                            <td class="py-3 px-4 font-semibold text-white">Disk Footprint</td>
+                            <td class="py-3 px-4">Zero long-term files (uses temporary <code class="text-xs">/tmp/</code>)</td>
+                            <td class="py-3 px-4">Dual-pool retention: 5GB audio, 500MB text archives</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- CLI Quick Controls -->
+        <div class="glass-card rounded-3xl p-6 sm:p-8 space-y-4">
+            <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                <span>💻</span> CLI Quick Controls
+            </h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-mono">
+                <div class="bg-slate-900/80 p-4 rounded-2xl border border-slate-800 space-y-2">
+                    <span class="text-slate-400 block font-sans font-bold text-sm">🎙️ Meeting Recorder CLI</span>
+                    <div class="text-slate-300"><span class="text-indigo-400">meeting-record</span> toggle <span class="text-slate-500"># Toggle recording</span></div>
+                    <div class="text-slate-300"><span class="text-indigo-400">meeting-record</span> start --stealth <span class="text-slate-500"># Start stealth mode</span></div>
+                    <div class="text-slate-300"><span class="text-indigo-400">meeting-record</span> stealth <span class="text-slate-500"># Toggle stealth HUD</span></div>
+                    <div class="text-slate-300"><span class="text-indigo-400">meeting-record</span> open <span class="text-slate-500"># Open meetings in Finder</span></div>
+                    <div class="text-slate-300"><span class="text-indigo-400">meeting-record</span> retention 5000 500 <span class="text-slate-500"># Set MB pools</span></div>
+                </div>
+
+                <div class="bg-slate-900/80 p-4 rounded-2xl border border-slate-800 space-y-2">
+                    <span class="text-slate-400 block font-sans font-bold text-sm">⚡ Dictation Pill CLI</span>
+                    <div class="text-slate-300"><span class="text-indigo-400">whisper-daemon</span> start <span class="text-slate-500"># Start background daemon</span></div>
+                    <div class="text-slate-300"><span class="text-indigo-400">whisper-daemon</span> trigger <span class="text-slate-500"># Trigger listening mode</span></div>
+                    <div class="text-slate-300"><span class="text-indigo-400">whisper-daemon</span> status <span class="text-slate-500"># Check running state</span></div>
+                    <div class="text-slate-300"><span class="text-indigo-400">whisper-daemon</span> logs <span class="text-slate-500"># View real-time logs</span></div>
+                    <div class="text-slate-300"><span class="text-indigo-400">whisper-daemon</span> restart <span class="text-slate-500"># Reload binary</span></div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</body>
+</html>
