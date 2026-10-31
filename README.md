@@ -84,7 +84,7 @@ graph TD
 Clone this repository and run the setup script:
 
 ```bash
-git clone https://github.com/your-username/whisper-metal-suite.git
+git clone https://github.com/NinzaRJ01/whisper-metal-suite.git
 cd whisper-metal-suite
 chmod +x install.sh
 ./install.sh
