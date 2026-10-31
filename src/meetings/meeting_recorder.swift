@@ -8,11 +8,21 @@ import Foundation
 // Automatically transcribes via Whisper Metal and opens summary in browser.
 // ==============================================================================
 
+class PillActionButton: NSButton {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        return true
+    }
+}
+
 class FloatingStatusPill: NSWindow {
     let visualEffect = NSVisualEffectView()
     let statusLabel = NSTextField()
-    let pillWidth: CGFloat = 460
+    let cancelButton = PillActionButton()
+    let pillWidth: CGFloat = 490
     let pillHeight: CGFloat = 64
+    
+    override var canBecomeKey: Bool { return false }
+    override var canBecomeMain: Bool { return false }
     
     init() {
         let contentRect = NSRect(x: 0, y: 0, width: pillWidth, height: pillHeight)
@@ -26,7 +36,8 @@ class FloatingStatusPill: NSWindow {
         self.isOpaque = false
         self.backgroundColor = .clear
         self.level = .floating
-        self.ignoresMouseEvents = true
+        self.ignoresMouseEvents = false
+        self.acceptsMouseMovedEvents = true
         self.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
         self.sharingType = .none // Exclude from Zoom, Teams, Google Meet & ScreenCaptureKit
         
@@ -50,10 +61,37 @@ class FloatingStatusPill: NSWindow {
         statusLabel.textColor = .white
         statusLabel.alignment = .center
         statusLabel.frame = NSRect(x: 16, y: 16, width: pillWidth - 32, height: 32)
-        
         visualEffect.addSubview(statusLabel)
+        
+        // Clickable Cancel / Discard button (shown only during active recording)
+        cancelButton.title = "✕ Cancel"
+        cancelButton.bezelStyle = .regularSquare
+        cancelButton.isBordered = false
+        cancelButton.wantsLayer = true
+        cancelButton.layer?.cornerRadius = 10
+        cancelButton.layer?.borderWidth = 1.0
+        cancelButton.layer?.borderColor = NSColor(calibratedRed: 1.0, green: 0.35, blue: 0.35, alpha: 0.55).cgColor
+        cancelButton.layer?.backgroundColor = NSColor(calibratedRed: 0.85, green: 0.15, blue: 0.15, alpha: 0.28).cgColor
+        let btnAttr = NSAttributedString(
+            string: "✕ Cancel",
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 13, weight: .bold),
+                .foregroundColor: NSColor(calibratedRed: 1.0, green: 0.55, blue: 0.55, alpha: 1.0)
+            ]
+        )
+        cancelButton.attributedTitle = btnAttr
+        cancelButton.target = self
+        cancelButton.action = #selector(cancelButtonClicked)
+        cancelButton.frame = NSRect(x: pillWidth - 114, y: 16, width: 94, height: 32)
+        cancelButton.isHidden = true
+        visualEffect.addSubview(cancelButton)
+        
         self.contentView = visualEffect
         centerTop()
+    }
+    
+    @objc func cancelButtonClicked() {
+        MeetingManager.shared.cancelRecording()
     }
     
     func centerTop() {
@@ -80,6 +118,16 @@ class FloatingStatusPill: NSWindow {
     
     func updateText(_ text: String, isRecording: Bool = false) {
         DispatchQueue.main.async {
+            if isRecording {
+                self.statusLabel.frame = NSRect(x: 20, y: 16, width: self.pillWidth - 142, height: 32)
+                self.statusLabel.alignment = .left
+                self.cancelButton.isHidden = false
+            } else {
+                self.cancelButton.isHidden = true
+                self.statusLabel.frame = NSRect(x: 16, y: 16, width: self.pillWidth - 32, height: 32)
+                self.statusLabel.alignment = .center
+            }
+            
             let color = isRecording ? NSColor(calibratedRed: 1.0, green: 0.35, blue: 0.35, alpha: 1.0) : .white
             let attr = NSAttributedString(
                 string: text,
@@ -89,6 +137,23 @@ class FloatingStatusPill: NSWindow {
                 ]
             )
             self.statusLabel.attributedStringValue = attr
+        }
+    }
+    
+    func showCanceledReaction() {
+        DispatchQueue.main.async {
+            self.cancelButton.isHidden = true
+            self.statusLabel.frame = NSRect(x: 16, y: 16, width: self.pillWidth - 32, height: 32)
+            self.statusLabel.alignment = .center
+            let attr = NSAttributedString(
+                string: "🚫 Recording Canceled (Discarded)",
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 15, weight: .semibold),
+                    .foregroundColor: NSColor(calibratedRed: 1.0, green: 0.6, blue: 0.4, alpha: 1.0)
+                ]
+            )
+            self.statusLabel.attributedStringValue = attr
+            self.hide(after: 1.2)
         }
     }
     
@@ -208,6 +273,9 @@ class MeetingManager: NSObject {
                 pill.show(text: "🔴 Recording Meeting... [00:00]", isRecording: true)
             }
             updateStatusItem(title: "🔴 00:00")
+            if let del = NSApplication.shared.delegate as? AppDelegate {
+                del.updateMenuRecordingState(isRecording: true)
+            }
             
             DispatchQueue.main.async {
                 self.recordingTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
@@ -229,6 +297,44 @@ class MeetingManager: NSObject {
         }
     }
     
+    func cancelRecording() {
+        guard isRecording else { return }
+        isRecording = false
+        
+        recordingTimer?.invalidate()
+        recordingTimer = nil
+        
+        audioEngine.stop()
+        audioEngine.inputNode.removeTap(onBus: 0)
+        
+        pcmLock.lock()
+        pcmBuffer.removeAll(keepingCapacity: false)
+        pcmLock.unlock()
+        
+        NSSound(named: "Basso")?.play()
+        
+        if let dir = currentMeetingDir {
+            try? FileManager.default.removeItem(at: dir)
+            print("Recording canceled and discarded. Cleanly removed folder: \(dir.path)")
+        }
+        currentMeetingDir = nil
+        currentWavURL = nil
+        
+        updateStatusItem(title: "🎙️")
+        if let del = NSApplication.shared.delegate as? AppDelegate {
+            del.updateMenuRecordingState(isRecording: false)
+        }
+        
+        if !stealthMode {
+            pill.showCanceledReaction()
+        } else {
+            let notifyProc = Process()
+            notifyProc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            notifyProc.arguments = ["-e", "display notification \"Recording discarded.\" with title \"MeetingRecorder (Canceled)\""]
+            try? notifyProc.run()
+        }
+    }
+    
     func stopAndSummarize() {
         guard isRecording else { return }
         isRecording = false
@@ -244,6 +350,9 @@ class MeetingManager: NSObject {
             pill.updateText("⏳ Transcribing with Whisper Metal...", isRecording: false)
         }
         updateStatusItem(title: "⏳ Transcribing...")
+        if let del = NSApplication.shared.delegate as? AppDelegate {
+            del.updateMenuRecordingState(isRecording: false)
+        }
         
         pcmLock.lock()
         let recordedPcm = pcmBuffer
@@ -371,6 +480,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem!
     var sigSource: DispatchSourceSignal?
     var sigusr2Source: DispatchSourceSignal?
+    var cancelSigSource: DispatchSourceSignal?
+    var toggleMenuItem: NSMenuItem?
+    var cancelMenuItem: NSMenuItem?
     var stealthMenuItem: NSMenuItem?
     var lastOptionTime: Date = Date.distantPast
     var wasOptionDown = false
@@ -378,6 +490,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         print("MeetingRecorder daemon initialized.")
         print("Trigger: Double-tap Option (⌥ ⌥) anywhere to Start/Stop meeting recording.")
+        print("Cancel: Press ⌥ Esc or click [✕ Cancel] on pill HUD to discard.")
         if MeetingManager.shared.stealthMode {
             print("Mode: STEALTH (HUD completely hidden, screen-share safe).")
         }
@@ -387,9 +500,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.title = "🎙️"
         
         let menu = NSMenu()
-        let toggleItem = NSMenuItem(title: "Record / Stop Meeting (⌥ ⌥)", action: #selector(toggleRecording), keyEquivalent: "")
+        let toggleItem = NSMenuItem(title: "Record Meeting (⌥ ⌥)", action: #selector(toggleRecording), keyEquivalent: "")
         toggleItem.target = self
+        self.toggleMenuItem = toggleItem
         menu.addItem(toggleItem)
+        
+        let cancelItem = NSMenuItem(title: "✕ Cancel / Discard Recording (⌥ Esc)", action: #selector(cancelRecordingAction), keyEquivalent: "")
+        cancelItem.target = self
+        cancelItem.isHidden = true
+        self.cancelMenuItem = cancelItem
+        menu.addItem(cancelItem)
         
         let stealthItem = NSMenuItem(title: "Stealth Mode (Screen Share Safe)", action: #selector(toggleStealthFromMenu), keyEquivalent: "")
         stealthItem.target = self
@@ -443,10 +563,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return event
         }
         
-        // 2. Also keep Option + / as fallback
+        // 2. Option + / as fallback toggle, and Option + Esc (53) / Option + Delete (51) to cancel
         NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self = self else { return }
             let isOption = event.modifierFlags.contains(.option)
+            if isOption && (event.keyCode == 53 || event.keyCode == 51) {
+                if MeetingManager.shared.isRecording {
+                    MeetingManager.shared.cancelRecording()
+                    return
+                }
+            }
             if isOption && event.keyCode == 44 { // 44 is '/' key
                 MeetingManager.shared.toggle()
             } else {
@@ -458,6 +584,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self = self else { return event }
             let isOption = event.modifierFlags.contains(.option)
+            if isOption && (event.keyCode == 53 || event.keyCode == 51) {
+                if MeetingManager.shared.isRecording {
+                    MeetingManager.shared.cancelRecording()
+                    return nil
+                }
+            }
             if isOption && event.keyCode == 44 {
                 MeetingManager.shared.toggle()
                 return nil
@@ -484,10 +616,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         sig2.resume()
         self.sigusr2Source = sig2
         signal(SIGUSR2, SIG_IGN)
+        
+        // SIGINT for CLI cancel / discard
+        let cancelSig = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
+        cancelSig.setEventHandler {
+            MeetingManager.shared.cancelRecording()
+        }
+        cancelSig.resume()
+        self.cancelSigSource = cancelSig
+        signal(SIGINT, SIG_IGN)
     }
     
     @objc func toggleRecording() {
         MeetingManager.shared.toggle()
+    }
+    
+    @objc func cancelRecordingAction() {
+        MeetingManager.shared.cancelRecording()
     }
     
     @objc func toggleStealthFromMenu() {
@@ -497,6 +642,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func updateStealthMenuState() {
         DispatchQueue.main.async {
             self.stealthMenuItem?.state = MeetingManager.shared.stealthMode ? .on : .off
+        }
+    }
+    
+    func updateMenuRecordingState(isRecording: Bool) {
+        DispatchQueue.main.async {
+            if isRecording {
+                self.toggleMenuItem?.title = "⏹ Stop & Summarize Meeting (⌥ ⌥)"
+                self.cancelMenuItem?.isHidden = false
+            } else {
+                self.toggleMenuItem?.title = "● Record Meeting (⌥ ⌥)"
+                self.cancelMenuItem?.isHidden = true
+            }
         }
     }
     

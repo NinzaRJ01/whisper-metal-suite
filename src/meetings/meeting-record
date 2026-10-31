@@ -55,6 +55,14 @@ case "${1:-toggle}" in
             echo "MeetingRecorder is not running."
         fi
         ;;
+    cancel|discard)
+        if is_running; then
+            pkill -SIGINT -x "meeting-recorder"
+            echo "✓ Canceled active recording and discarded audio (SIGINT sent)."
+        else
+            echo "MeetingRecorder is not running."
+        fi
+        ;;
     toggle)
         if is_running; then
             pkill -SIGUSR1 -x "meeting-recorder"
@@ -115,6 +123,7 @@ Usage: meeting-record [COMMAND]
 
 Commands:
   toggle               Start or stop meeting recording (default)
+  cancel / discard     Immediately cancel active recording and discard audio without saving
   start [--stealth]    Launch MeetingRecorder background daemon (optional --stealth)
   stealth              Toggle Stealth Mode (hide floating HUD for screen sharing)
   stop                 Quit MeetingRecorder daemon
@@ -128,8 +137,10 @@ Stealth Mode:
   Also, the pill has native macOS sharingType=.none so Zoom, Meet, and Teams
   screen shares will NEVER capture it even when displayed on your screen!
 
-Trigger: Double-tap Option (⌥ ⌥) anywhere to record.
-When stopped, audio is transcribed with Whisper Metal and the summary opens in your browser.
+Trigger & Controls:
+  - Start/Stop: Double-tap Option (⌥ ⌥) or click menu bar icon
+  - Cancel/Discard: Click [✕ Cancel] on floating pill, or press ⌥ Esc (Option+Escape), or run 'meeting-record cancel'
+  - When stopped normally, audio is transcribed with Whisper Metal and the summary opens in your browser.
 All meetings are saved to: ~/EmptyOne/meetings/
 EOF
         ;;

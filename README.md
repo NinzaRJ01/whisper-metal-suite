@@ -106,6 +106,12 @@ The installer will:
 
 ### 2. Meeting Recording & Summarization
 * **Start / Stop Recording**: Double-tap Option (**`⌥ ⌥`**) or click the **`🎙️`** status item in your top menu bar.
+* **Cancel / Discard Recording**: Accidental trigger, silence, or changed your mind? Discard instantly via:
+  * **Pill HUD Button**: Click the **`[✕ Cancel]`** button on the right side of the floating status pill.
+  * **Global Hotkey**: Press **`⌥ Esc`** (Option + Escape) or **`⌥ ⌫`** (Option + Backspace).
+  * **Menu Bar**: Click **`🎙️`** $\rightarrow$ **`✕ Cancel / Discard Recording`**.
+  * **CLI**: Run `meeting-record cancel`.
+  * *Effect*: Audio engine stops immediately, the meeting directory is wiped cleanly from disk, no background transcription runs, and a distinct cancel cue confirms the discard.
 * **Stealth Mode (Screen-Share Safe)**:
   ```bash
   meeting-record start --stealth   # Launches with HUD completely hidden
@@ -153,6 +159,7 @@ For full technical details, see [`docs/PRIVACY_AND_DLP.md`](docs/PRIVACY_AND_DLP
 ### Meeting Recorder (`meeting-record`)
 ```bash
 meeting-record toggle             # Start or stop recording
+meeting-record cancel             # Cancel/discard active recording immediately without saving
 meeting-record start --stealth    # Start in screen-share safe stealth mode
 meeting-record stealth            # Toggle stealth mode on/off
 meeting-record status             # Check if daemon is active
