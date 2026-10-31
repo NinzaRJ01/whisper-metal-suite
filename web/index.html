@@ -106,8 +106,8 @@ graph TD
         WHISPER_MEET -->|"transcript.json (offsets)"| SUM_PY
         
         SUM_PY -->|"Tier 1: Gemini (Sanitized Only)"| AGY["Gemini (AGY + noteworthy-notes)"]
-        AGY -.->|"Fallback if Offline"| LM["Tier 2: Local LM Studio (Qwen 7B)"]
-        LM -.->|"Safety Fallback"| NLP["Tier 3: Rule-Based NLP"]
+        AGY -. "Fallback if Offline" .-> LM["Tier 2: Local LM Studio (Qwen 7B)"]
+        LM -. "Safety Fallback" .-> NLP["Tier 3: Rule-Based NLP"]
         
         AGY -->|"Markdown & HTML"| REPORT["Interactive summary.html & summary.md"]
         LM -->|"Markdown & HTML"| REPORT

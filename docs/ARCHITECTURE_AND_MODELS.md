@@ -67,10 +67,10 @@ graph TD
     TXT["Local Plaintext Transcript (transcript.txt)"] --> TIER1{"Tier 1: Cloud Gemini<br/>(agy -p + noteworthy-notes)"}
     
     TIER1 -->|"Success (Internet Online)"| REPORT["Executive Notes + Dynamic Sections<br/>(summary.md & summary.html)"]
-    TIER1 -.->|"Timeout (25s) or Network Offline"| TIER2{"Tier 2: Local LLM Fallback<br/>(LM Studio http://127.0.0.1:1234)"}
+    TIER1 -. "Timeout (25s) or Network Offline" .-> TIER2{"Tier 2: Local LLM Fallback<br/>(LM Studio http://127.0.0.1:1234)"}
     
     TIER2 -->|"Success (Zero Latency Offline)"| REPORT
-    TIER2 -.->|"LM Studio Not Running"| TIER3["Tier 3: Safety NLP Fallback<br/>(Heuristic Key-Sentence Extraction)"]
+    TIER2 -. "LM Studio Not Running" .-> TIER3["Tier 3: Safety NLP Fallback<br/>(Heuristic Key-Sentence Extraction)"]
     
     TIER3 --> REPORT
 ```

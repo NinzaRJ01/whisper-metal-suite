@@ -35,40 +35,40 @@
 ## 🗺️ System Architecture
 
 ```mermaid
-graph TD
-    subgraph Audio["🎧 Ingestion Layer"]
+flowchart TD
+    subgraph Audio ["Audio Ingestion Layer"]
         MIC["Mac Microphone"] -->|"48kHz Stereo/Mono"| ENG["AVAudioEngine Tap"]
-        ENG -->|"In-Memory Downsample (Stride=3)"| BUF["16kHz Mono PCM Buffer"]
+        ENG -->|"In-Memory Downsample - Stride 3"| BUF["16kHz Mono PCM Buffer"]
     end
 
-    subgraph Dictation["⚡ Pipeline A: Push-to-Talk Dictation (whisper-pill)"]
+    subgraph Dictation ["Pipeline A: Push-to-Talk Dictation (whisper-pill)"]
         BUF -->|"450ms Rolling Slice"| SNAP["/tmp/whisper_stream_snapshot.wav"]
-        SNAP -->|"whisper-cli (~180ms)"| BASE["ggml-base.en.bin (English Only)"]
-        BASE -->|"Live Words"| HUD["Floating Glass HUD (sharingType = .none)"]
+        SNAP -->|"whisper-cli ~180ms"| BASE["ggml-base.en.bin - English Only"]
+        BASE -->|"Live Words"| HUD["Floating Glass HUD - Screen-Share Safe"]
         BUF -->|"Key Release"| FINAL["/tmp/whisper_stream_final.wav"]
-        FINAL -->|"whisper-cli"| TURBO["ggml-large-v3-turbo.bin (-l en)"]
+        FINAL -->|"whisper-cli"| TURBO["ggml-large-v3-turbo.bin - English Locked"]
         TURBO -->|"Cmd + V"| CURSOR["Cursor / Active Window"]
     end
 
-    subgraph Meeting["🎙️ Pipeline B: Meeting Recorder (meeting-record)"]
+    subgraph Meeting ["Pipeline B: Meeting Recorder (meeting-record)"]
         BUF -->|"Continuous Audio"| WAV["~/EmptyOne/meetings/.../audio.wav"]
         WAV -->|"whisper-cli -oj -otxt -l en"| W_ENGINE["Whisper Metal Engine"]
-        W_ENGINE -->|"Raw Transcript"| DLP["🛡️ Local Privacy Middleware"]
+        W_ENGINE -->|"Raw Transcript"| DLP["Local Privacy Middleware"]
         DLP -->|"Variables Substituted"| SUM["summarize_meeting.py"]
-        W_ENGINE -->|"transcript.json (Offsets)"| SUM
+        W_ENGINE -->|"transcript.json - Timestamp Offsets"| SUM
         
-        SUM -->|"Tier 1: Cloud"| GEMINI["Gemini (AGY + noteworthy-notes)"]
-        GEMINI -.->|"Offline Fallback"| LM["Tier 2: Local LM Studio (Qwen 7B)"]
-        LM -.->|"Safety Fallback"| NLP["Tier 3: Heuristic NLP"]
+        SUM -->|"Tier 1: Cloud"| GEMINI["Gemini - AGY Notes Synthesizer"]
+        GEMINI -. "Offline Fallback" .-> LM["Tier 2: Local LM Studio - Qwen 7B"]
+        LM -. "Safety Fallback" .-> NLP["Tier 3: Heuristic NLP"]
         
         SUM -->|"Interactive Report"| HTML["summary.html & summary.md"]
-        HTML -->|"Auto-Launch"| BROWSER["Default Browser (Live Synced Transcript)"]
+        HTML -->|"Auto-Launch"| BROWSER["Default Browser - Live Synced Transcript"]
     end
 
-    subgraph Retention["💾 Independent Capacity Management"]
+    subgraph Retention ["Independent Capacity Management"]
         PRUNE["prune_meetings.py"]
-        PRUNE -->|"Heavy Pool (5000 MB)"| P1["Prunes Oldest audio.wav First"]
-        PRUNE -->|"Light Pool (500 MB)"| P2["Preserves Text Summaries Long-Term"]
+        PRUNE -->|"Heavy Pool 5000 MB"| P1["Prunes Oldest audio.wav First"]
+        PRUNE -->|"Light Pool 500 MB"| P2["Preserves Text Summaries Long-Term"]
     end
 ```
 
