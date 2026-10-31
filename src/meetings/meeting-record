@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# meeting-record: CLI controller for MeetingRecorder (⌥ /)
+# ==============================================================================
+
+set -euo pipefail
+
+PID_FILE="/tmp/meeting_recorder.pid"
+BINARY="$HOME/.local/bin/meeting-recorder"
+MEETINGS_DIR="$HOME/EmptyOne/meetings"
+
+is_running() {
+    pgrep -x "meeting-recorder" > /dev/null 2>&1
+}
+
+case "${1:-toggle}" in
+    start)
+        STEALTH_FLAG=""
+        if [[ "${2:-}" == "--stealth" || "${2:-}" == "-s" || "${2:-}" == "--no-hud" ]]; then
+            STEALTH_FLAG="--stealth"
+        fi
+        if is_running; then
+            echo "MeetingRecorder is already running."
+            if [[ -n "$STEALTH_FLAG" ]]; then
+                pkill -SIGUSR2 -x "meeting-recorder" || true
+                echo "Switched to stealth mode."
+            fi
+        else
+            echo "Starting MeetingRecorder in background..."
+            nohup "$BINARY" $STEALTH_FLAG > /tmp/meeting_recorder.log 2>&1 &
+            sleep 0.5
+            if [[ -n "$STEALTH_FLAG" ]]; then
+                echo "✓ MeetingRecorder started in STEALTH mode (HUD hidden, screen-share safe)."
+            else
+                echo "✓ MeetingRecorder started. Hotkey: Double-tap Option (⌥ ⌥) or click menu bar icon."
+            fi
+        fi
+        ;;
+    stealth)
+        if is_running; then
+            pkill -SIGUSR2 -x "meeting-recorder"
+            echo "✓ Toggled Stealth Mode on active MeetingRecorder."
+        else
+            echo "Starting MeetingRecorder in stealth mode..."
+            nohup "$BINARY" --stealth > /tmp/meeting_recorder.log 2>&1 &
+            sleep 0.5
+            echo "✓ MeetingRecorder started in STEALTH mode (HUD hidden, screen-share safe)."
+        fi
+        ;;
+    stop)
+        if is_running; then
+            pkill -x "meeting-recorder" || true
+            echo "✓ Stopped MeetingRecorder."
+        else
+            echo "MeetingRecorder is not running."
+        fi
+        ;;
+    toggle)
+        if is_running; then
+            pkill -SIGUSR1 -x "meeting-recorder"
+            echo "✓ Toggled recording (SIGUSR1 sent)."
+        else
+            echo "Starting MeetingRecorder..."
+            nohup "$BINARY" > /tmp/meeting_recorder.log 2>&1 &
+            sleep 0.5
+            sleep 0.8
+            pkill -SIGUSR1 -x "meeting-recorder" || true
+            echo "✓ MeetingRecorder started and recording triggered."
+        fi
+        ;;
+    status)
+        if is_running; then
+            PID=$(pgrep -x "meeting-recorder")
+            echo "MeetingRecorder is running (PID: $PID)."
+            echo "Hotkey: Double-tap Option (⌥ ⌥) or Option + /"
+            echo "Meetings directory: $MEETINGS_DIR"
+        else
+            echo "MeetingRecorder is stopped."
+        fi
+        ;;
+    open)
+        open "$MEETINGS_DIR"
+        ;;
+    prune)
+        python3 "$HOME/EmptyOne/prune_meetings.py" "$MEETINGS_DIR"
+        ;;
+    retention)
+        CONFIG_FILE="$MEETINGS_DIR/retention.json"
+        if [[ $# -ge 3 ]]; then
+            AUDIO_MB="$2"
+            TEXT_MB="$3"
+            cat << EOF > "$CONFIG_FILE"
+{
+  "audio_video": {
+    "max_size_mb": $AUDIO_MB,
+    "max_count": 20
+  },
+  "transcripts_summaries": {
+    "max_size_mb": $TEXT_MB,
+    "max_count": 100
+  }
+}
+EOF
+            echo "✓ Updated retention limits: Audio/Video max = ${AUDIO_MB}MB, Transcripts/Summaries max = ${TEXT_MB}MB"
+        elif [[ -f "$CONFIG_FILE" ]]; then
+            cat "$CONFIG_FILE"
+        else
+            python3 "$HOME/EmptyOne/prune_meetings.py" "$MEETINGS_DIR" > /dev/null
+            cat "$CONFIG_FILE"
+        fi
+        ;;
+    help|--help|-h)
+        cat << 'EOF'
+Usage: meeting-record [COMMAND]
+
+Commands:
+  toggle               Start or stop meeting recording (default)
+  start [--stealth]    Launch MeetingRecorder background daemon (optional --stealth)
+  stealth              Toggle Stealth Mode (hide floating HUD for screen sharing)
+  stop                 Quit MeetingRecorder daemon
+  status               Check if daemon is active
+  open                 Open meetings directory in Finder
+  prune                Run independent capacity cleanup on audio & summaries
+  retention [AUD] [TXT] View or set capacity limits in MB (e.g. meeting-record retention 5000 500)
+
+Stealth Mode:
+  When active, the floating recording pill/tile is completely suppressed.
+  Also, the pill has native macOS sharingType=.none so Zoom, Meet, and Teams
+  screen shares will NEVER capture it even when displayed on your screen!
+
+Trigger: Double-tap Option (⌥ ⌥) anywhere to record.
+When stopped, audio is transcribed with Whisper Metal and the summary opens in your browser.
+All meetings are saved to: ~/EmptyOne/meetings/
+EOF
+        ;;
+    *)
+        echo "Unknown command: $1. Run 'meeting-record --help' for usage."
+        exit 1
+        ;;
+esac

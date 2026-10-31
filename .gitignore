@@ -31,7 +31,7 @@ venv/
 env/
 
 # Meeting Recordings & Local Data
-meetings/
+/meetings/
 test_run/
 *.wav
 *.mp3
