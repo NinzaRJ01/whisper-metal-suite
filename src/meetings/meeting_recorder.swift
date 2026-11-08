@@ -529,11 +529,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
         MeetingManager.shared.statusItem = statusItem
         
-        // 1. Double-Tap Option Monitor (⌥ ⌥)
+        // 1. Double-Tap Option Monitor (Right Option ⌥ ⌥ only; Left Option double-tap ignored)
         NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
             guard let self = self else { return }
             let isOptionDown = event.modifierFlags.contains(.option)
-            if isOptionDown && !self.wasOptionDown {
+            let isRightOption = isOptionDown && ((event.modifierFlags.rawValue & 0x40) != 0)
+            
+            if isRightOption && !self.wasOptionDown {
                 let now = Date()
                 let interval = now.timeIntervalSince(self.lastOptionTime)
                 if interval < 0.45 && interval > 0.04 {
@@ -542,14 +544,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 } else {
                     self.lastOptionTime = now
                 }
+            } else if isOptionDown && !isRightOption {
+                // Left Option pressed - clear double-tap tracker so Left Option never triggers recorder
+                self.lastOptionTime = Date.distantPast
             }
-            self.wasOptionDown = isOptionDown
+            self.wasOptionDown = isRightOption
         }
         
         NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
             guard let self = self else { return event }
             let isOptionDown = event.modifierFlags.contains(.option)
-            if isOptionDown && !self.wasOptionDown {
+            let isRightOption = isOptionDown && ((event.modifierFlags.rawValue & 0x40) != 0)
+            
+            if isRightOption && !self.wasOptionDown {
                 let now = Date()
                 let interval = now.timeIntervalSince(self.lastOptionTime)
                 if interval < 0.45 && interval > 0.04 {
@@ -558,8 +565,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 } else {
                     self.lastOptionTime = now
                 }
+            } else if isOptionDown && !isRightOption {
+                // Left Option pressed - clear double-tap tracker so Left Option never triggers recorder
+                self.lastOptionTime = Date.distantPast
             }
-            self.wasOptionDown = isOptionDown
+            self.wasOptionDown = isRightOption
             return event
         }
         
